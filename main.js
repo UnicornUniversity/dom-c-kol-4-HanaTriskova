@@ -3,23 +3,36 @@
 
 /**
  * Main function.
- * Generates a list of employees based on input data.
+ * It generates employees and then calculates statistics from them.
  *
- * @param {object} dtoIn - input data
- * @param {number} dtoIn.count - how many employees should be generated
- * @param {object} dtoIn.age - age range
- * @param {number} dtoIn.age.min - minimum age
- * @param {number} dtoIn.age.max - maximum age
- * @returns {Array} dtoOut - generated employees
+ * @param {object} dtoIn input data
+ * @param {number} dtoIn.count number of employees to generate
+ * @param {object} dtoIn.age age interval
+ * @param {number} dtoIn.age.min minimum age (inclusive)
+ * @param {number} dtoIn.age.max maximum age (inclusive)
+ * @returns {object} dtoOut final result
  */
 export function main(dtoIn) {
+  const employees = generateEmployeeData(dtoIn);
+  const dtoOut = getEmployeeStatistics(employees);
+  return dtoOut;
+}
 
-  // read input values
+/**
+ * Generates an array of employees.
+ *
+ * @param {object} dtoIn input data
+ * @param {number} dtoIn.count number of employees
+ * @param {object} dtoIn.age age interval
+ * @param {number} dtoIn.age.min minimum age
+ * @param {number} dtoIn.age.max maximum age
+ * @returns {Array} list of employees
+ */
+export function generateEmployeeData(dtoIn) {
   const count = dtoIn.count;
   const minAge = dtoIn.age.min;
   const maxAge = dtoIn.age.max;
 
-  // lists used for random selection
   const maleNames = [
     "Jan", "Pavel", "Tomáš", "Jiří", "Vratislav",
     "Karel", "Lukáš", "Martin", "Ondřej", "Petr",
@@ -50,16 +63,13 @@ export function main(dtoIn) {
 
   const workloads = [10, 20, 30, 40];
 
-  // result array
-  const dtoOut = [];
+  const employees = [];
 
-  // store already used birthdates so they are not duplicated
+  // to avoid having the same birthdate twice
   const usedBirthdates = new Set();
 
-  // generate employees one by one
-  for (let employeeIndex = 0; employeeIndex < count; employeeIndex++) {
-
-    // randomly decide gender
+  for (let i = 0; i < count; i++) {
+    // choose gender
     let gender;
     if (Math.random() < 0.5) {
       gender = "male";
@@ -67,7 +77,7 @@ export function main(dtoIn) {
       gender = "female";
     }
 
-    // pick name and surname based on gender
+    // choose name and surname based on gender
     let name;
     let surname;
     if (gender === "male") {
@@ -78,67 +88,157 @@ export function main(dtoIn) {
       surname = randomItem(surnamesFemale);
     }
 
-    // generate birthdate until it is unique
+    // generate birthdate in correct age interval
     let birthdate;
     do {
       birthdate = randomBirthdate(minAge, maxAge);
     } while (usedBirthdates.has(birthdate));
     usedBirthdates.add(birthdate);
 
-    // pick workload
+    // choose workload
     const workload = randomItem(workloads);
 
-    // create employee object
-    const employee = {
+    employees.push({
       gender: gender,
       birthdate: birthdate,
       name: name,
       surname: surname,
       workload: workload
-    };
-
-    // add employee to result
-    dtoOut.push(employee);
+    });
   }
 
-  return dtoOut;
+  return employees;
 }
 
 /**
- * Returns a random number without decimals between min and max.
+ * Calculates statistics from employee list.
+ *
+ * @param {Array} employees list of employees
+ * @returns {object} dtoOut statistics and sorted list
  */
-function randomInt(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
+export function getEmployeeStatistics(employees) {
+  const total = employees.length;
 
-/**
- * Returns one random item from the given array.
- */
-function randomItem(array) {
-  const index = randomInt(0, array.length - 1);
-  return array[index];
-}
-
-/**
- * Generates a random birthdate so that the age is between ageMin and ageMax.
- * The result is returned as an ISO date string.
- */
-function randomBirthdate(ageMin, ageMax) {
+  let workload10 = 0;
+  let workload20 = 0;
+  let workload30 = 0;
+  let workload40 = 0;
 
   const now = new Date();
 
-  // calculate allowed date range
-  const minDate = new Date(now);
-  minDate.setFullYear(minDate.getFullYear() - ageMax);
+  let sumAgeExact = 0;
+  const agesWhole = [];
+  const workloads = [];
 
-  const maxDate = new Date(now);
-  maxDate.setFullYear(maxDate.getFullYear() - ageMin);
+  let sumWomenWorkload = 0;
+  let womenCount = 0;
 
-  // pick random time between the two dates
-  const minTime = minDate.getTime();
-  const maxTime = maxDate.getTime();
-  const randomTime = randomInt(minTime, maxTime);
+  for (let i = 0; i < employees.length; i++) {
+    const employee = employees[i];
 
-  const date = new Date(randomTime);
-  return date.toISOString();
+    // workload counters
+    if (employee.workload === 10) workload10++;
+    if (employee.workload === 20) workload20++;
+    if (employee.workload === 30) workload30++;
+    if (employee.workload === 40) workload40++;
+
+    // age
+    const ageExact = getAgeInYears(employee.birthdate, now);
+    sumAgeExact += ageExact;
+    agesWhole.push(Math.floor(ageExact));
+
+    workloads.push(employee.workload);
+
+    // average workload for women
+    if (employee.gender === "female") {
+      sumWomenWorkload += employee.workload;
+      womenCount++;
+    }
+  }
+
+  const averageAge = total === 0 ? 0 : roundToOneDecimal(sumAgeExact / total);
+  const minAge = agesWhole.length === 0 ? 0 : Math.min(...agesWhole);
+  const maxAge = agesWhole.length === 0 ? 0 : Math.max(...agesWhole);
+
+  const medianAge = medianOfNumbers(agesWhole);
+  const medianWorkload = medianOfNumbers(workloads);
+
+  const averageWomenWorkload =
+    womenCount === 0 ? 0 : roundToOneDecimal(sumWomenWorkload / womenCount);
+
+  // sort employees by workload from lowest to highest
+  const sortedByWorkload = employees
+    .slice()
+    .sort((a, b) => a.workload - b.workload);
+
+  return {
+    total: total,
+    workload10: workload10,
+    workload20: workload20,
+    workload30: workload30,
+    workload40: workload40,
+    averageAge: averageAge,
+    minAge: minAge,
+    maxAge: maxAge,
+    medianAge: medianAge,
+    medianWorkload: medianWorkload,
+    averageWomenWorkload: averageWomenWorkload,
+    sortedByWorkload: sortedByWorkload
+  };
 }
+
+// returns random item from array
+function randomItem(array) {
+  const index = randomNumber(0, array.length - 1);
+  return array[index];
+}
+
+// returns random number between min and max (inclusive)
+function randomNumber(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+// rounds number to one decimal place
+function roundToOneDecimal(number) {
+  return Math.round(number * 10) / 10;
+}
+
+// calculates age in years (using average year length)
+function getAgeInYears(birthdateIso, now) {
+  const birth = new Date(birthdateIso);
+  const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
+  return (now.getTime() - birth.getTime()) / msPerYear;
+}
+
+// calculates median from number array
+function medianOfNumbers(values) {
+  if (values.length === 0) return 0;
+
+  const sorted = values.slice().sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+
+  if (sorted.length % 2 === 1) {
+    return sorted[middle];
+  }
+
+  return (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+// generates random birthdate between (now - maxAge) and (now - minAge)
+function randomBirthdate(ageMin, ageMax) {
+  const now = new Date();
+
+  const oldest = new Date(now);
+  oldest.setFullYear(oldest.getFullYear() - ageMax);
+
+  const youngest = new Date(now);
+  youngest.setFullYear(youngest.getFullYear() - ageMin);
+
+  const minTime = oldest.getTime();
+  const maxTime = youngest.getTime();
+
+  const randomTime = randomNumber(minTime, maxTime);
+
+  return new Date(randomTime).toISOString();
+}
+
