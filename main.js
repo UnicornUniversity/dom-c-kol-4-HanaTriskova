@@ -30,6 +30,7 @@ const WORKLOADS = [10, 20, 30, 40];
 
 /**
  * Main entry.
+ * It generates employees and returns statistics.
  * @param {object} dtoIn input data
  * @returns {object} dtoOut final output
  */
@@ -44,10 +45,11 @@ export function main(dtoIn) {
  * @returns {Array} employees list
  */
 export function generateEmployeeData(dtoIn) {
-  const employees = [];
   const now = new Date();
+  const employees = [];
+  const count = dtoIn.count;
 
-  for (let i = 0; i < dtoIn.count; i++) {
+  for (let i = 0; i < count; i++) {
     employees.push(createEmployee(dtoIn.age.min, dtoIn.age.max, now));
   }
 
@@ -61,48 +63,7 @@ export function generateEmployeeData(dtoIn) {
  */
 export function getEmployeeStatistics(employees) {
   const now = new Date();
-  const collected = collectStatsInputs(employees, now);
 
-  const ageStats = calculateAgeStats(collected.ages);
-  const medianWorkload = calculateMedianWorkload(collected.workloads);
-  const sortedByWorkload = sortEmployeesByWorkload(employees);
-
-  return buildDtoOut(
-    employees.length,
-    collected.workloadCounts,
-    ageStats,
-    medianWorkload,
-    collected.averageWomenWorkload,
-    sortedByWorkload
-  );
-}
-
-/**
- * Creates one employee object.
- * @param {number} minAge minimum age
- * @param {number} maxAge maximum age
- * @param {Date} now current time
- * @returns {object} employee
- */
-function createEmployee(minAge, maxAge, now) {
-  const gender = randomGender();
-  const name = pickName(gender);
-  const surname = pickSurname(gender);
-  const workload = randomItem(WORKLOADS);
-
-  // birthdate is ISO string (required by assignment)
-  const birthdate = randomBirthdateIso(minAge, maxAge, now);
-
-  return { gender, birthdate, name, surname, workload };
-}
-
-/**
- * Goes through employees and collects numbers we need for stats.
- * @param {Array} employees list of employees
- * @param {Date} now current time
- * @returns {object} collected values
- */
-function collectStatsInputs(employees, now) {
   const workloadCounts = { workload10: 0, workload20: 0, workload30: 0, workload40: 0 };
   const ages = [];
   const workloads = [];
@@ -113,11 +74,10 @@ function collectStatsInputs(employees, now) {
   for (let i = 0; i < employees.length; i++) {
     const e = employees[i];
 
-    addWorkloadCount(workloadCounts, e.workload);
+    increaseWorkloadCount(workloadCounts, e.workload);
     workloads.push(e.workload);
 
-    // age is a decimal number of years (tests expect this style)
-    const age = ageInYears(e.birthdate, now);
+    const age = getFullYearsAge(e.birthdate, now);
     ages.push(age);
 
     if (e.gender === "female") {
@@ -126,73 +86,13 @@ function collectStatsInputs(employees, now) {
     }
   }
 
+  const ageStats = calculateAgeStats(ages);
+  const medianWorkload = calculateMedian(workloads);
   const averageWomenWorkload = womenCount === 0 ? 0 : roundToOneDecimal(womenSum / womenCount);
+  const sortedByWorkload = sortEmployeesByWorkload(employees);
 
-  return { workloadCounts, ages, workloads, averageWomenWorkload };
-}
-
-/**
- * Increases the correct workload counter.
- * @param {object} counts counters object
- * @param {number} workload workload value
- * @returns {void}
- */
-function addWorkloadCount(counts, workload) {
-  const key = `workload${workload}`;
-  if (counts[key] !== undefined) counts[key] += 1;
-}
-
-/**
- * Calculates average/min/max/median for ages.
- * @param {Array} ages array of numbers
- * @returns {object} age statistics
- */
-function calculateAgeStats(ages) {
-  if (ages.length === 0) return { averageAge: 0, minAge: 0, maxAge: 0, medianAge: 0 };
-
-  const sorted = [...ages].sort((a, b) => a - b);
-
-  const averageAge = roundToOneDecimal(sumNumbers(ages) / ages.length);
-  const minAge = sorted[0];
-  const maxAge = sorted[sorted.length - 1];
-  const medianAge = medianFromSorted(sorted);
-
-  return { averageAge, minAge, maxAge, medianAge };
-}
-
-/**
- * Calculates median workload.
- * @param {Array} workloads array of numbers
- * @returns {number} median workload
- */
-function calculateMedianWorkload(workloads) {
-  if (workloads.length === 0) return 0;
-  const sorted = [...workloads].sort((a, b) => a - b);
-  return medianFromSorted(sorted);
-}
-
-/**
- * Sorts employees by workload.
- * @param {Array} employees list of employees
- * @returns {Array} sorted copy of employees
- */
-function sortEmployeesByWorkload(employees) {
-  return [...employees].sort((a, b) => a.workload - b.workload);
-}
-
-/**
- * Builds dtoOut in required structure.
- * @param {number} total total employees
- * @param {object} workloadCounts counts of workloads
- * @param {object} ageStats age statistics
- * @param {number} medianWorkload median workload
- * @param {number} averageWomenWorkload average workload for women
- * @param {Array} sortedByWorkload employees sorted by workload
- * @returns {object} dtoOut
- */
-function buildDtoOut(total, workloadCounts, ageStats, medianWorkload, averageWomenWorkload, sortedByWorkload) {
   return {
-    total: total,
+    total: employees.length,
     workload10: workloadCounts.workload10,
     workload20: workloadCounts.workload20,
     workload30: workloadCounts.workload30,
@@ -208,29 +108,76 @@ function buildDtoOut(total, workloadCounts, ageStats, medianWorkload, averageWom
 }
 
 /**
- * Picks random gender.
- * @returns {string} "male" or "female"
+ * Creates one employee object.
+ * @param {number} minAge minimum age
+ * @param {number} maxAge maximum age
+ * @param {Date} now current time
+ * @returns {object} employee
  */
-function randomGender() {
-  return Math.random() < 0.5 ? "male" : "female";
+function createEmployee(minAge, maxAge, now) {
+  const gender = Math.random() < 0.5 ? "male" : "female";
+  const name = gender === "male" ? randomItem(MALE_NAMES) : randomItem(FEMALE_NAMES);
+  const surname = gender === "male" ? randomItem(SURNAMES_MALE) : randomItem(SURNAMES_FEMALE);
+
+  const workload = randomItem(WORKLOADS);
+
+  // pick target age first, then generate a birthdate that really gives this age
+  const targetAge = randomWholeNumber(minAge, maxAge);
+  const birthdate = randomBirthdateIsoForAge(targetAge, now);
+
+  return { gender, birthdate, name, surname, workload };
 }
 
 /**
- * Picks name by gender.
- * @param {string} gender gender
- * @returns {string} name
+ * Increases the correct workload counter.
+ * @param {object} counts counters object
+ * @param {number} workload workload value
+ * @returns {void}
  */
-function pickName(gender) {
-  return randomItem(gender === "male" ? MALE_NAMES : FEMALE_NAMES);
+function increaseWorkloadCount(counts, workload) {
+  const key = `workload${workload}`;
+  if (counts[key] !== undefined) counts[key] += 1;
 }
 
 /**
- * Picks surname by gender.
- * @param {string} gender gender
- * @returns {string} surname
+ * Calculates average/min/max/median for ages (ages are whole years).
+ * @param {Array} ages array of numbers
+ * @returns {object} age statistics
  */
-function pickSurname(gender) {
-  return randomItem(gender === "male" ? SURNAMES_MALE : SURNAMES_FEMALE);
+function calculateAgeStats(ages) {
+  if (ages.length === 0) {
+    return { averageAge: 0, minAge: 0, maxAge: 0, medianAge: 0 };
+  }
+
+  const sorted = [...ages].sort((a, b) => a - b);
+  const avg = sumNumbers(ages) / ages.length;
+
+  return {
+    averageAge: roundToOneDecimal(avg),
+    minAge: sorted[0],
+    maxAge: sorted[sorted.length - 1],
+    medianAge: medianFromSorted(sorted)
+  };
+}
+
+/**
+ * Calculates median from numeric array.
+ * @param {Array} values array of numbers
+ * @returns {number} median
+ */
+function calculateMedian(values) {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return medianFromSorted(sorted);
+}
+
+/**
+ * Sorts employees by workload (does not change original array).
+ * @param {Array} employees list of employees
+ * @returns {Array} sorted copy
+ */
+function sortEmployeesByWorkload(employees) {
+  return [...employees].sort((a, b) => a.workload - b.workload);
 }
 
 /**
@@ -254,36 +201,50 @@ function randomWholeNumber(min, max) {
 }
 
 /**
- * Creates random birthdate ISO so age is in <minAge, maxAge> (inclusive).
- * This uses "time difference" style (365.25 days per year), same as age calc.
- * @param {number} minAge minimum age (inclusive)
- * @param {number} maxAge maximum age (inclusive)
+ * Generates a random birthdate so the full-years age equals targetAge.
+ * @param {number} targetAge target full-years age
  * @param {Date} now current time
  * @returns {string} ISO date-time string
  */
-function randomBirthdateIso(minAge, maxAge, now) {
-  const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
+function randomBirthdateIsoForAge(targetAge, now) {
+  // We want birthdate to be between:
+  // (now shifted by -(targetAge+1) years, now shifted by -targetAge years] so full-years age is targetAge.
+  const end = new Date(now);
+  end.setFullYear(end.getFullYear() - targetAge);
 
-  // oldest allowed birth moment
-  const minTime = now.getTime() - (maxAge * msPerYear);
+  const start = new Date(now);
+  start.setFullYear(start.getFullYear() - (targetAge + 1));
+  // small push forward so we don't accidentally get targetAge+1
+  start.setMilliseconds(start.getMilliseconds() + 1);
 
-  // youngest allowed birth moment
-  const maxTime = now.getTime() - (minAge * msPerYear);
+  const startMs = start.getTime();
+  const endMs = end.getTime();
+  const randomMs = startMs + Math.random() * (endMs - startMs);
 
-  const randomTime = minTime + Math.random() * (maxTime - minTime);
-  return new Date(randomTime).toISOString();
+  return new Date(randomMs).toISOString();
 }
 
 /**
- * Calculates age in years using time difference (decimal years).
+ * Calculates age in full years (like real age).
  * @param {string} birthdateIso ISO date-time
  * @param {Date} now current time
- * @returns {number} age in years
+ * @returns {number} age in full years
  */
-function ageInYears(birthdateIso, now) {
+function getFullYearsAge(birthdateIso, now) {
   const birth = new Date(birthdateIso);
-  const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
-  return (now.getTime() - birth.getTime()) / msPerYear;
+
+  let age = now.getFullYear() - birth.getFullYear();
+
+  const nowMonth = now.getMonth();
+  const birthMonth = birth.getMonth();
+
+  if (nowMonth < birthMonth) {
+    age -= 1;
+  } else if (nowMonth === birthMonth && now.getDate() < birth.getDate()) {
+    age -= 1;
+  }
+
+  return age;
 }
 
 /**
@@ -313,10 +274,10 @@ function roundToOneDecimal(value) {
  */
 function medianFromSorted(sortedValues) {
   const n = sortedValues.length;
-  const middle = Math.floor(n / 2);
+  const mid = Math.floor(n / 2);
 
-  if (n % 2 === 1) return sortedValues[middle];
-  return (sortedValues[middle - 1] + sortedValues[middle]) / 2;
+  if (n % 2 === 1) return sortedValues[mid];
+  return (sortedValues[mid - 1] + sortedValues[mid]) / 2;
 }
 
 
