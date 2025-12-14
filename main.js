@@ -30,7 +30,6 @@ const WORKLOADS = [10, 20, 30, 40];
 
 /**
  * Main entry.
- * It generates employees and then creates statistics from them.
  * @param {object} dtoIn input data
  * @returns {object} dtoOut final output
  */
@@ -90,6 +89,8 @@ function createEmployee(minAge, maxAge, now) {
   const name = pickName(gender);
   const surname = pickSurname(gender);
   const workload = randomItem(WORKLOADS);
+
+  // birthdate is ISO string (required by assignment)
   const birthdate = randomBirthdateIso(minAge, maxAge, now);
 
   return { gender, birthdate, name, surname, workload };
@@ -115,7 +116,8 @@ function collectStatsInputs(employees, now) {
     addWorkloadCount(workloadCounts, e.workload);
     workloads.push(e.workload);
 
-    const age = ageInFullYears(e.birthdate, now);
+    // age is a decimal number of years (tests expect this style)
+    const age = ageInYears(e.birthdate, now);
     ages.push(age);
 
     if (e.gender === "female") {
@@ -141,7 +143,7 @@ function addWorkloadCount(counts, workload) {
 }
 
 /**
- * Calculates average/min/max/median for ages (ages are full years).
+ * Calculates average/min/max/median for ages.
  * @param {Array} ages array of numbers
  * @returns {object} age statistics
  */
@@ -149,6 +151,7 @@ function calculateAgeStats(ages) {
   if (ages.length === 0) return { averageAge: 0, minAge: 0, maxAge: 0, medianAge: 0 };
 
   const sorted = [...ages].sort((a, b) => a - b);
+
   const averageAge = roundToOneDecimal(sumNumbers(ages) / ages.length);
   const minAge = sorted[0];
   const maxAge = sorted[sorted.length - 1];
@@ -251,49 +254,36 @@ function randomWholeNumber(min, max) {
 }
 
 /**
- * Creates random birthdate ISO so full age is in <minAge, maxAge> (inclusive).
+ * Creates random birthdate ISO so age is in <minAge, maxAge> (inclusive).
+ * This uses "time difference" style (365.25 days per year), same as age calc.
  * @param {number} minAge minimum age (inclusive)
  * @param {number} maxAge maximum age (inclusive)
  * @param {Date} now current time
  * @returns {string} ISO date-time string
  */
 function randomBirthdateIso(minAge, maxAge, now) {
-  // For "full years" age:
-  // - oldest allowed: already maxAge years old
-  // - youngest allowed: already minAge years old
-  const oldest = new Date(now);
-  oldest.setFullYear(oldest.getFullYear() - maxAge);
+  const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
 
-  const youngest = new Date(now);
-  youngest.setFullYear(youngest.getFullYear() - minAge);
+  // oldest allowed birth moment
+  const minTime = now.getTime() - (maxAge * msPerYear);
 
-  const minTime = oldest.getTime();
-  const maxTime = youngest.getTime();
+  // youngest allowed birth moment
+  const maxTime = now.getTime() - (minAge * msPerYear);
+
   const randomTime = minTime + Math.random() * (maxTime - minTime);
-
   return new Date(randomTime).toISOString();
 }
 
 /**
- * Calculates age in full years (like usual age).
+ * Calculates age in years using time difference (decimal years).
  * @param {string} birthdateIso ISO date-time
  * @param {Date} now current time
- * @returns {number} age in full years
+ * @returns {number} age in years
  */
-function ageInFullYears(birthdateIso, now) {
+function ageInYears(birthdateIso, now) {
   const birth = new Date(birthdateIso);
-
-  let age = now.getFullYear() - birth.getFullYear();
-
-  const monthDiff = now.getMonth() - birth.getMonth();
-  const dayDiff = now.getDate() - birth.getDate();
-
-  // birthday not reached yet this year -> subtract 1
-  if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) {
-    age -= 1;
-  }
-
-  return age;
+  const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
+  return (now.getTime() - birth.getTime()) / msPerYear;
 }
 
 /**
