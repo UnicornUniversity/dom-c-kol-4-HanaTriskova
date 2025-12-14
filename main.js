@@ -30,6 +30,7 @@ const SURNAMES_FEMALE = [
 ];
 
 const WORKLOADS = [10, 20, 30, 40];
+const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
 
 /**
  * Main entry for the assignment.
@@ -67,7 +68,7 @@ export function generateEmployeeData(dtoIn) {
 export function getEmployeeStatistics(employees) {
   const collected = collectInputs(employees);
 
-  const ageStats = calculateAgeStats(collected.ages);
+  const ageStats = calculateAgeStats(collected.agesPrecise);
   const medianWorkload = medianOfNumbers(collected.workloads);
   const sortedByWorkload = sortByWorkload(employees);
 
@@ -99,7 +100,7 @@ function createEmployee(minAge, maxAge, now) {
   const name = pickName(gender);
   const surname = pickSurname(gender);
   const workload = randomFromArray(WORKLOADS);
-  const birthdate = randomBirthdateIsoForAgeRange(minAge, maxAge, now);
+  const birthdate = randomBirthdateIsoByMsInterval(minAge, maxAge, now);
   return { gender, birthdate, name, surname, workload };
 }
 
@@ -138,7 +139,7 @@ function collectInputs(employees) {
   const now = new Date();
   const workloadCounts = { workload10: 0, workload20: 0, workload30: 0, workload40: 0 };
 
-  const ages = [];
+  const agesPrecise = [];
   const workloads = [];
 
   let womenSum = 0;
@@ -150,8 +151,8 @@ function collectInputs(employees) {
     incrementWorkload(workloadCounts, e.workload);
     workloads.push(e.workload);
 
-    const age = ageInWholeYears(e.birthdate, now);
-    ages.push(age);
+    const age = ageInYearsPrecise(e.birthdate, now);
+    agesPrecise.push(age);
 
     if (e.gender === "female") {
       womenSum += e.workload;
@@ -160,7 +161,7 @@ function collectInputs(employees) {
   }
 
   const averageWomenWorkload = womenCount === 0 ? 0 : roundToOneDecimal(womenSum / womenCount);
-  return { workloadCounts, ages, workloads, averageWomenWorkload };
+  return { workloadCounts, agesPrecise, workloads, averageWomenWorkload };
 }
 
 /**
@@ -176,18 +177,21 @@ function incrementWorkload(counts, workload) {
 
 /**
  * Age stats (average/min/max/median).
- * @param {Array} ages Array of ages (numbers).
+ * @param {Array} agesPrecise Array of ages (decimal years).
  * @returns {object} Age statistics.
  */
-function calculateAgeStats(ages) {
-  if (ages.length === 0) return { averageAge: 0, minAge: 0, maxAge: 0, medianAge: 0 };
+function calculateAgeStats(agesPrecise) {
+  if (agesPrecise.length === 0) return { averageAge: 0, minAge: 0, maxAge: 0, medianAge: 0 };
 
-  const sorted = [...ages].sort((a, b) => a - b);
+  const sorted = [...agesPrecise].sort((a, b) => a - b);
 
-  const averageAge = roundToOneDecimal(sumNumbers(ages) / ages.length);
-  const minAge = sorted[0];
-  const maxAge = sorted[sorted.length - 1];
-  const medianAge = medianFromSorted(sorted);
+  const averageAge = roundToOneDecimal(sumNumbers(agesPrecise) / agesPrecise.length);
+
+  const minAge = Math.floor(sorted[0]);
+  const maxAge = Math.floor(sorted[sorted.length - 1]);
+
+  const medianPrecise = medianFromSorted(sorted);
+  const medianAge = Math.floor(medianPrecise);
 
   return { averageAge, minAge, maxAge, medianAge };
 }
@@ -221,45 +225,29 @@ function randomInt(min, max) {
 }
 
 /**
- * Generates birthdate so the "whole years" age is between minAge and maxAge.
+ * Generates birthdate so decimal age is within <minAge, maxAge>.
  * @param {number} minAge Min age.
  * @param {number} maxAge Max age.
  * @param {Date} now Current date.
  * @returns {string} ISO date-time.
  */
-function randomBirthdateIsoForAgeRange(minAge, maxAge, now) {
-  const targetAge = randomInt(minAge, maxAge);
+function randomBirthdateIsoByMsInterval(minAge, maxAge, now) {
+  const youngestTime = now.getTime() - (minAge * MS_PER_YEAR);
+  const oldestTime = now.getTime() - (maxAge * MS_PER_YEAR);
 
-  const start = new Date(now);
-  start.setFullYear(now.getFullYear() - targetAge - 1);
-  start.setDate(start.getDate() + 1);
-
-  const end = new Date(now);
-  end.setFullYear(now.getFullYear() - targetAge);
-
-  const time = randomInt(start.getTime(), end.getTime());
+  const time = oldestTime + Math.random() * (youngestTime - oldestTime);
   return new Date(time).toISOString();
 }
 
 /**
- * Calculates age in whole years (like normal age).
+ * Calculates age in years using average year length (365.25 days).
  * @param {string} birthdateIso ISO date-time.
  * @param {Date} now Current date.
- * @returns {number} Age in whole years.
+ * @returns {number} Age in years (decimal).
  */
-function ageInWholeYears(birthdateIso, now) {
+function ageInYearsPrecise(birthdateIso, now) {
   const birth = new Date(birthdateIso);
-
-  let age = now.getFullYear() - birth.getFullYear();
-
-  const monthDiff = now.getMonth() - birth.getMonth();
-  const dayDiff = now.getDate() - birth.getDate();
-
-  if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) {
-    age -= 1;
-  }
-
-  return age;
+  return (now.getTime() - birth.getTime()) / MS_PER_YEAR;
 }
 
 /**
@@ -305,6 +293,3 @@ function medianFromSorted(sortedValues) {
   if (n % 2 === 1) return sortedValues[middle];
   return (sortedValues[middle - 1] + sortedValues[middle]) / 2;
 }
-
-
-
